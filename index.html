@@ -178,58 +178,53 @@ function validityDays(days){
 async function generateSelfSigned({cn='ENTAQ Demo', san='', alg='ECDSA'}){
   await ensureJsrsasign();
 
-  // 1) Keypair in jsrsasign only (no WebCrypto bridging)
-  let kp, sigAlg, keyUsage;
+  // 1) Keypair
+  let kp, sigAlg, keyUsageBin;
   if (alg === 'RSA') {
     kp = KEYUTIL.generateKeypair('RSA', 2048);
     sigAlg = 'SHA256withRSA';
-    keyUsage = '00000110'; // digitalSignature + keyEncipherment
+    keyUsageBin = '00000110'; // digitalSignature + keyEncipherment
   } else {
-    kp = KEYUTIL.generateKeypair('EC', 'secp256r1'); // P-256
+    kp = KEYUTIL.generateKeypair('EC', 'secp256r1'); // P‑256
     sigAlg = 'SHA256withECDSA';
-    keyUsage = '00100100'; // digitalSignature + keyAgreement
+    keyUsageBin = '00100100'; // digitalSignature + keyAgreement
   }
 
-  // 2) Validity (Zulu time strings as required by jsrsasign)
+  // 2) Validity
   const nowSec   = KJUR.jws.IntDate.getNow();
   const notbefore = KJUR.jws.IntDate.intDate2Zulu(nowSec);
   const notafter  = KJUR.jws.IntDate.intDate2Zulu(nowSec + 365*24*3600);
 
-  // 3) Extensions
+  // 3) EXTENSIONS — use plain objects (NOT new KJUR.asn1.x509.*)
   const ext = [
-    new KJUR.asn1.x509.BasicConstraints({ cA:false }),
-    new KJUR.asn1.x509.KeyUsage({ bin: keyUsage })
+    { extname: "basicConstraints", cA: false },
+    { extname: "keyUsage", bin: keyUsageBin }
   ];
-  if (san) ext.push(new KJUR.asn1.x509.SubjectAltName({ array:[{ dns: san }] }));
+  if (san) ext.push({ extname: "subjectAltName", array: [{ dns: san }] });
 
-  // 4) Build + self-sign using the high-level factory (avoids setVersion et al.)
+  // 4) Build + self-sign via high-level factory
   const pem = KJUR.asn1.x509.X509Util.newCertPEM({
-    serial:   { int: String(Math.floor(Date.now()/1000)) },
-    sigalg:   sigAlg,
-    issuer:   { str: `/CN=${cn}` },
-    subject:  { str: `/CN=${cn}` },
-    notbefore,
-    notafter,
-    sbjpubkey: kp.pubKeyObj,
+    serial:    { int: String(Math.floor(Date.now()/1000)) },
+    sigalg:    sigAlg,
+    issuer:    { str: `/CN=${cn}` },
+    subject:   { str: `/CN=${cn}` },
+    notbefore, notafter,
+    sbjpubkey: kp.pubKeyObj,   // ok to pass the key object
     ext,
-    cakey:    kp.prvKeyObj
+    cakey:     kp.prvKeyObj
   });
 
-  // 5) Minimal metadata for CBOM
+  // 5) Minimal CBOM metadata
   const nowIso = new Date().toISOString().slice(0,10);
   const naIso  = new Date(Date.now()+365*864e5).toISOString().slice(0,10);
   const metadata = {
     endpoint: (san || cn) + ':443',
-    cn,
-    san: san ? [san] : [],
-    issuer: cn, // self-signed demo
-    serial: String(Math.floor(Date.now()/1000)),
+    cn, san: san ? [san] : [],
+    issuer: cn, serial: String(Math.floor(Date.now()/1000)),
     algorithm: (alg === 'RSA' ? 'RSA' : 'ECDSA P-256'),
     keyBits: (alg === 'RSA' ? 2048 : 256),
-    notBefore: nowIso,
-    notAfter:  naIso,
-    environment: 'dev',
-    external: true,
+    notBefore: nowIso, notAfter: naIso,
+    environment: 'dev', external: true,
     provenance: ['gen:self-signed']
   };
 
