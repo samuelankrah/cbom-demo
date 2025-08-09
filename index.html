@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ENTAQ · CBOM Demo — Scan · Map · Plan · Export</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --card:#121822; --muted:#91a1b2; --text:#e6edf3; --accent:#60a5fa; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --line:#1f2a37;
+      --pill:#0f172a; --pillText:#cbd5e1;
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;background:linear-gradient(180deg,#0b0f14 0%,#0a1018 100%);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif}
+    .wrap{max-width:1200px;margin:0 auto;padding:24px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{width:36px;height:36px;border-radius:10px;background:radial-gradient(circle at 30% 30%,#93c5fd,transparent 40%),radial-gradient(circle at 70% 70%,#22d3ee,transparent 40%),linear-gradient(135deg,#0ea5e9 0%,#64748b 100%);box-shadow:0 0 0 2px #0e1726 inset, 0 6px 20px rgba(0,0,0,.35)}
+    h1{font-size:18px;margin:0}
+    .watermark{font-size:12px;color:var(--muted)}
+    .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:18px 0}
+    .step{background:var(--card);padding:10px 12px;border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;gap:10px;opacity:.85}
+    .step.active{outline:2px solid var(--accent);opacity:1}
+    .step .idx{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:#0f172a;color:#93c5fd;border:1px solid #1f2937}
+    .grid{display:grid;grid-template-columns:1.1fr 1fr;gap:16px}
+    .card{background:var(--card);border:1px solid #1f2a37;border-radius:16px;padding:16px}
+    .card h2{margin:0 0 12px 0;font-size:16px}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .pill{background:var(--pill);color:var(--pillText);padding:6px 10px;border-radius:999px;border:1px solid #1e293b;font-size:12px}
+    .btn{appearance:none;border:none;background:linear-gradient(180deg,#1f2937,#0f172a);color:#e5e7eb;padding:10px 14px;border-radius:10px;border:1px solid #334155;cursor:pointer}
+    .btn:hover{filter:brightness(1.08)} .btn.alt{background:linear-gradient(180deg,#0ea5e9,#0284c7);border-color:#0369a1;color:#00131d;font-weight:600}
+    .btn.ghost{background:transparent;border:1px dashed #374151;color:#94a3b8}
+    .field{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+    label{color:#9fb0c2;font-size:12px}
+    input[type="text"], input[type="number"], textarea, select{width:100%;padding:10px 12px;border-radius:10px;background:#0b1220;color:var(--text);border:1px solid #1f2a37}
+    textarea{min-height:90px;resize:vertical}
+    .table{width:100%;border-collapse:collapse}
+    .table th,.table td{border-bottom:1px solid #1e293b;padding:8px 6px;text-align:left;font-size:12px}
+    .right{text-align:right}
+    .sliderRow{display:grid;grid-template-columns:200px 1fr 60px;gap:10px;align-items:center}
+    .foot{margin-top:20px;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:12px}
+    canvas{width:100%;height:160px;background:#0b1220;border:1px solid #1f2a37;border-radius:10px}
+    .tagOK{color:#22c55e}.tagWARN{color:#f59e0b}.tagBAD{color:#ef4444}
+    details{border:1px solid #1f2937;border-radius:10px;padding:10px;background:#0b1220}
+    details>summary{cursor:pointer}
+    @media (max-width: 980px){ .grid{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <h1>ENTAQ · CBOM Demo (Client‑Side)</h1>
+          <div class="watermark">"Generated from public certificate metadata; no private keys processed."</div>
+        </div>
+      </div>
+      <div class="row">
+        <span class="pill">Privacy‑first</span>
+        <span class="pill">PQC‑aware</span>
+        <span class="pill">No private keys</span>
+      </div>
+    </header>
+
+    <nav class="steps" id="steps">
+      <div class="step active"><div class="idx">1</div> Scan</div>
+      <div class="step"><div class="idx">2</div> Map</div>
+      <div class="step"><div class="idx">3</div> Plan</div>
+      <div class="step"><div class="idx">4</div> Export</div>
+    </nav>
+
+    <section id="stage"></section>
+
+    <div class="foot">
+      <div>Compliance guardrails: PCI DSS 4.0 (crypto governance), NIST CSF PR.DS/PR.IP, ISO 27001 (asset & crypto controls).</div>
+      <div><span class="pill">Demo Mode</span></div>
+    </div>
+  </div>
+
+<script>
+/* ===========================================================
+   Constants & State
+   =========================================================== */
+const WATERMARK = "Generated from public certificate metadata; no private keys processed.";
+const state = {
+  mode: 'DEMO',
+  inventory: [],
+  sliders: { expiry: 0.6, external: 0.7, weakAlgo: 0.9, rsa2048: 0.5 },
+  anonymize: true,
+  confidenceThreshold: 0.7,
+  current: 0
+};
+
+/* ===========================================================
+   Utilities
+   =========================================================== */
+async function sha256Hex(text){
+  if (crypto?.subtle){
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  // fallback (demo only)
+  let h=5381; for(let i=0;i<text.length;i++){h=((h<<5)+h)+text.charCodeAt(i)|0} return ('00000000'+(h>>>0).toString(16)).slice(-8);
+}
+function isWeakAlgo(alg,bits){ const a=(alg||'').toUpperCase(); if(a.includes('SHA1')||a.includes('MD5')) return true; if(a.includes('RSA')) return (bits||0)<2048; return false; }
+function expiryUrgency(notAfter){
+  const now=Date.now(), exp=new Date(notAfter).getTime(); const days=(exp-now)/(1000*3600*24);
+  if (isNaN(days)) return 0.3; if (days<=0) return 1; if (days<=7) return 0.95; if (days<=30) return 0.8; if (days<=90) return 0.6; if (days<=180) return 0.4; return 0.2;
+}
+function riskScore(cert){
+  const w = state.sliders;
+  const exp = expiryUrgency(cert.notAfter);
+  const weak = isWeakAlgo(cert.algorithm, cert.keyBits) ? 1 : 0;
+  const ext = cert.external ? 1 : 0;
+  const rsaUp = (/RSA/i.test(cert.algorithm) && (cert.keyBits||0)===2048) ? 1 : 0;
+  const s = (w.expiry*exp + w.weakAlgo*weak + w.external*ext + w.rsa2048*rsaUp) / (w.expiry+w.weakAlgo+w.external+w.rsa2048);
+  return Math.round(s*100);
+}
+function pqcRecommendation(c){
+  const out=[];
+  if (c.external) out.push('Prioritize Hybrid TLS key exchange (classical + KEM)');
+  if (/RSA|ECDSA/i.test(c.algorithm)) out.push('Plan X.509 signature agility; target PQC‑capable CAs when available');
+  if (/RSA/i.test(c.algorithm) && c.keyBits===2048) out.push('Interim: upgrade to RSA‑3072/3840 or ECDSA P‑256 while planning PQC');
+  if (!out.length) out.push('Monitor; standard refresh with PQC readiness checks');
+  return out.join(' · ');
+}
+async function mapOwnership(cert){
+  const key = await sha256Hex((cert.cn||'')+'|'+(cert.endpoint||''));
+  const teams=['Payments','Core-API','Mobile','Web','Edge','Data','Infra','SRE'];
+  const idx=parseInt(key.slice(0,2),16)%teams.length;
+  const conf=(parseInt(key.slice(2,4),16)%51+50)/100; const stale=(parseInt(key.slice(4,6),16)%10)<3;
+  return { owner:{team:teams[idx],backup:teams[(idx+1)%teams.length],confidence:conf,stale}, environment:['prod','stage','dev'][parseInt(key.slice(6,8),16)%3] };
+}
+async function anonymizeFields(cert){
+  if (!state.anonymize) return cert;
+  const c={...cert};
+  if (c.cn) c.cn='CN#'+(await sha256Hex(c.cn)).slice(0,12);
+  if (Array.isArray(c.san)) c.san = await Promise.all(c.san.map(async s=>'SAN#'+(await sha256Hex(String(s))).slice(0,12)));
+  if (c.endpoint) c.endpoint=(await sha256Hex(c.endpoint)).slice(0,12)+'.endpoint';
+  return c;
+}
+async function finalizeEntry(raw){
+  const mapped = await mapOwnership(raw);
+  const base = {...raw, ...mapped};
+  const entry = {
+    endpoint: base.endpoint||'', cn: base.cn||'', san: base.san||[], issuer: base.issuer||'', serial: base.serial||'',
+    algorithm: base.algorithm||'', keyBits: base.keyBits||0, notBefore: base.notBefore||'', notAfter: base.notAfter||'',
+    environment: base.environment||'dev', external: !!base.external,
+    owner: base.owner, risk:{score:0,notes:[]}, pqc:{tagged:true,priority:0,recommendation:''}, provenance: base.provenance||[]
+  };
+  entry.risk.score = riskScore(entry);
+  entry.pqc.priority = entry.risk.score;
+  entry.pqc.recommendation = pqcRecommendation(entry);
+  return state.anonymize ? await anonymizeFields(entry) : entry;
+}
+function looksLikePrivateKey(t){ return [/BEGIN\s+PRIVATE\s+KEY/i,/BEGIN\s+RSA\s+PRIVATE\s+KEY/i,/BEGIN\s+EC\s+PRIVATE\s+KEY/i,/BEGIN\s+ENCRYPTED\s+PRIVATE\s+KEY/i].some(re=>re.test(t||'')); }
+
+/* ===========================================================
+   jsrsasign-based Self-signed Certificate Generator
+   =========================================================== */
+async function ensureJsrsasign(){
+  if (window.KJUR && window.KEYUTIL) return true;
+  await new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/jsrsasign@10.9.0/lib/jsrsasign-all-min.js';
+    s.onload=()=>resolve(true); s.onerror=()=>reject(new Error('Failed to load jsrsasign')); document.head.appendChild(s);
+  });
+  return true;
+}
+function toPem(label, derHex){
+  const b = window.hex2b64(derHex);
+  return `-----BEGIN ${label}-----\n`+b.replace(/(.{64})/g,'$1\n')+`\n-----END ${label}-----\n`;
+}
+function validityDays(days){
+  const now = KJUR.jws.IntDate.getNow();
+  return { notBefore: KJUR.jws.IntDate.intDate2Zulu(now), notAfter: KJUR.jws.IntDate.intDate2Zulu(now + days*24*3600) };
+}
+async function generateSelfSigned({cn='ENTAQ Demo', san='', alg='ECDSA'}){
+  await ensureJsrsasign();
+  let kp,sigAlg,keyUsage;
+  if (alg==='RSA'){ kp=KEYUTIL.generateKeypair('RSA',2048); sigAlg='SHA256withRSA'; keyUsage='00000110'; }
+  else { kp=KEYUTIL.generateKeypair('EC','secp256r1'); sigAlg='SHA256withECDSA'; keyUsage='00100100'; }
+  const cert=new KJUR.asn1.x509.Certificate();
+  cert.setVersion(3);
+  cert.setSerialNumberByParam({int: String(Math.floor(Date.now()/1000))});
+  cert.setSignatureAlgByParam({name: sigAlg});
+  cert.setIssuerByParam({str:`/CN=${cn}`});
+  cert.setSubjectByParam({str:`/CN=${cn}`});
+  const v=validityDays(365); cert.setNotBeforeByParam({str:v.notBefore}); cert.setNotAfterByParam({str:v.notAfter});
+  cert.setPublicKey(kp.pubKeyObj);
+  cert.appendExtension(new KJUR.asn1.x509.BasicConstraints({cA:false}));
+  cert.appendExtension(new KJUR.asn1.x509.KeyUsage({bin:keyUsage}));
+  if (san) cert.appendExtension(new KJUR.asn1.x509.SubjectAltName({array:[{dns:san}]}));
+  cert.sign(kp.prvKeyObj,sigAlg);
+  const derHex=cert.getEncodedHex(); const pem=toPem('CERTIFICATE',derHex);
+  const nowIso=new Date().toISOString().slice(0,10), na=new Date(Date.now()+365*864e5).toISOString().slice(0,10);
+  const meta={endpoint:(san||cn)+':443', cn, san: san?[san]:[], issuer:cn, serial:String(Math.floor(Date.now()/1000)),
+              algorithm:(alg==='RSA'?'RSA':'ECDSA P-256'), keyBits:(alg==='RSA'?2048:256), notBefore:nowIso, notAfter:na,
+              environment:'dev', external:true, provenance:['gen:self-signed']};
+  return {pem, metadata: meta};
+}
+
+/* ===========================================================
+   Demo Data
+   =========================================================== */
+function demoPool(){
+  const now=Date.now(), days=d=>new Date(now+d*86400000).toISOString().slice(0,10);
+  return [
+    {endpoint:'api.example.com:443', cn:'api.example.com', san:['api.example.com','api.internal'], issuer:'Example CA R3', serial:'01A3F4', algorithm:'RSA', keyBits:2048, notBefore:days(-300), notAfter:days(20), environment:'prod', external:true, provenance:['sim:gateway']},
+    {endpoint:'edge.example.net:443', cn:'edge.example.net', san:['cdn.example.net'], issuer:'Example CA R4', serial:'09BC22', algorithm:'ECDSA P-256', keyBits:256, notBefore:days(-100), notAfter:days(200), environment:'prod', external:true, provenance:['sim:cdn']},
+    {endpoint:'svc.internal:8443', cn:'svc.internal', san:['svc','svc.cluster.local'], issuer:'Corp-CA-01', serial:'7733AA', algorithm:'RSA', keyBits:4096, notBefore:days(-700), notAfter:days(90), environment:'stage', external:false, provenance:['sim:mesh']},
+    {endpoint:'db.internal:5432', cn:'db.internal', san:['db','db.cluster'], issuer:'Corp-CA-01', serial:'88FF29', algorithm:'RSA', keyBits:2048, notBefore:days(-800), notAfter:days(6), environment:'prod', external:false, provenance:['sim:cmdb']},
+    {endpoint:'mobile.example.com:443', cn:'mobile.example.com', san:['m.example.com'], issuer:'Example CA R3', serial:'19DC77', algorithm:'RSA', keyBits:2048, notBefore:days(-400), notAfter:days(380), environment:'prod', external:true, provenance:['sim:app']}
+  ];
+}
+
+/* ===========================================================
+   Rendering
+   =========================================================== */
+const stage = document.getElementById('stage');
+const steps = Array.from(document.querySelectorAll('#steps .step'));
+function setStep(i){ steps.forEach((el,idx)=>el.classList.toggle('active', idx===i)); }
+function render(){ if(state.current===1) return renderMap(); if(state.current===2) return renderPlan(); if(state.current===3) return renderExport(); return renderScan(); }
+
+/* ---------- Scan ---------- */
+function renderScan(){
+  setStep(0);
+  stage.innerHTML = `
+    <div class="grid">
+      <div class="card">
+        <h2>Scan – Select Connectors</h2>
+        <div class="row">
+          <label class="pill"><input type="checkbox" checked disabled /> Simulated: CA</label>
+          <label class="pill"><input type="checkbox" checked disabled /> Simulated: CDN</label>
+          <label class="pill"><input type="checkbox" checked disabled /> Simulated: API Gateway</label>
+          <label class="pill"><input type="checkbox" checked disabled /> Simulated: Service Mesh</label>
+          <label class="pill"><input type="checkbox" checked disabled /> Simulated: DNS</label>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn alt" id="btnRun">Run Demo Scan</button>
+          <button class="btn" id="btnClear">Clear</button>
+          <label class="pill"><input id="anonToggle" type="checkbox" ${state.anonymize?'checked':''}/> Anonymization ON</label>
+        </div>
+
+        <details style="margin-top:12px">
+          <summary>Lab Mode (optional) – Paste public certificate PEM or metadata JSON</summary>
+          <div class="field">
+            <label>Paste PEM (certificate only) or metadata JSON array. <span class="muted">Private key material is blocked.</span></label>
+            <textarea id="labInput" placeholder="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n\nOR\n\n[{\n  &quot;endpoint&quot;: &quot;api.example:443&quot;,\n  &quot;cn&quot;: &quot;api.example&quot;,\n  &quot;san&quot;:[&quot;api.example&quot;],\n  &quot;issuer&quot;: &quot;Example CA&quot;,\n  &quot;serial&quot;: &quot;01A3&quot;,\n  &quot;algorithm&quot;: &quot;RSA&quot;,\n  &quot;keyBits&quot;: 2048,\n  &quot;notBefore&quot;: &quot;2024-01-01&quot;,\n  &quot;notAfter&quot;: &quot;2025-12-31&quot;,\n  &quot;external&quot;: true,\n  &quot;provenance&quot;:[&quot;lab:manual&quot;]\n}]"></textarea>
+          </div>
+          <div class="row">
+            <button class="btn" id="btnLabParse">Import Metadata</button>
+            <span class="pill" id="labWarn" style="border-style:dashed"></span>
+          </div>
+        </details>
+
+        <details style="margin-top:12px">
+          <summary>Generate demo certificate (PEM) – self‑signed (ECDSA or RSA)</summary>
+          <div class="row" style="margin:8px 0">
+            <input class="grow" id="genCN"  placeholder="Common Name (e.g., entaq.local)"/>
+            <input class="grow" id="genSAN" placeholder="SAN (optional DNS)"/>
+            <select id="genALG"><option value="ECDSA">ECDSA P-256</option><option value="RSA">RSA 2048</option></select>
+          </div>
+          <div class="row">
+            <button class="btn" id="btnGenPem">Generate PEM</button>
+            <button class="btn ghost" id="btnAddInv" disabled>Add to Inventory</button>
+            <button class="btn" id="btnDlPem" disabled>Download PEM</button>
+          </div>
+          <div class="field">
+            <label>PEM Preview (public cert only)</label>
+            <textarea id="genPEM" readonly placeholder="PEM will appear here…"></textarea>
+          </div>
+        </details>
+      </div>
+
+      <div class="card">
+        <h2>Inventory Preview</h2>
+        <table class="table" id="tableInv"><thead><tr>
+          <th>Endpoint</th><th>CN</th><th>Alg</th><th>Bits</th><th>Not After</th><th>Ext</th><th>Prov</th>
+        </tr></thead><tbody></tbody></table>
+        <div class="right" style="margin-top:8px"><button class="btn" id="goMap" disabled>Next: Map →</button></div>
+      </div>
+    </div>`;
+
+  // handlers
+  document.getElementById('anonToggle').onchange = e=>{ state.anonymize = e.target.checked; render(); };
+  document.getElementById('btnClear').onclick = ()=>{ state.inventory=[]; render(); };
+  document.getElementById('btnRun').onclick = async ()=>{
+    const pool = demoPool(); const out=[];
+    for (const r of pool) out.push(await finalizeEntry(r));
+    state.inventory = out; render();
+  };
+  document.getElementById('btnLabParse').onclick = async ()=>{
+    const ta=document.getElementById('labInput'), warn=document.getElementById('labWarn'); const raw=ta.value.trim(); warn.textContent='';
+    if (!raw) return;
+    if (looksLikePrivateKey(raw)){ warn.textContent='Blocked: input resembles private key material.'; return; }
+    try{
+      if (raw.startsWith('[')){ const parsed=JSON.parse(raw); const out=[]; for(const i of parsed) out.push(await finalizeEntry(i)); state.inventory=out; render(); return; }
+    }catch(e){/* try PEM path next */}
+    if (/BEGIN\s+CERTIFICATE/i.test(raw)){
+      const certs = raw.split(/-----END CERTIFICATE-----/i).filter(x=>x.includes('BEGIN CERTIFICATE'));
+      const out=[]; for (const c of certs){
+        const fp=(await sha256Hex(c.replace(/\r|\n|\s/g,''))).slice(0,16);
+        out.push(await finalizeEntry({endpoint:'unknown:443', cn:'unknown', san:[], issuer:'unknown', serial:fp.toUpperCase(), algorithm:'unknown', keyBits:0, environment:'dev', external:false, provenance:['lab:pem']}));
+      }
+      state.inventory=out; render(); return;
+    }
+    warn.textContent='Unsupported input. Provide metadata JSON array or certificate PEM (no private keys).';
+  };
+
+  // generator
+  const btnGen = document.getElementById('btnGenPem');
+  const btnAdd = document.getElementById('btnAddInv');
+  const btnDl  = document.getElementById('btnDlPem');
+  const taPem  = document.getElementById('genPEM');
+
+  btnGen.onclick = async ()=>{
+    btnGen.disabled=true; btnAdd.disabled=true; btnDl.disabled=true; taPem.value='Generating…';
+    try{
+      const cn=(document.getElementById('genCN').value||'').trim()||'ENTAQ Demo';
+      const san=(document.getElementById('genSAN').value||'').trim();
+      const alg=(document.getElementById('genALG').value||'ECDSA');
+      const {pem, metadata} = await generateSelfSigned({cn,san,alg});
+      taPem.value=pem; btnAdd._meta = metadata; btnAdd.disabled=false; btnDl.disabled=false;
+    }catch(err){ taPem.value='Error: '+(err?.message||String(err)); }
+    finally{ btnGen.disabled=false; }
+  };
+  btnAdd.onclick = async ()=>{ if(!btnAdd._meta) return; const entry=await finalizeEntry(btnAdd._meta); state.inventory=[...state.inventory, entry]; render(); };
+  btnDl.onclick = ()=>{ if(!taPem.value) return; const blob=new Blob([taPem.value],{type:'application/x-pem-file'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='entaq-demo-cert.pem'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1200); };
+
+  // table + next
+  const tbody = stage.querySelector('#tableInv tbody');
+  for (const c of state.inventory){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${c.endpoint}</td><td>${c.cn}</td><td>${c.algorithm}</td><td>${c.keyBits}</td><td>${c.notAfter||''}</td><td>${c.external?'Yes':'No'}</td><td>${(c.provenance||[]).join(',')}</td>`;
+    tbody.appendChild(tr);
+  }
+  const go = stage.querySelector('#goMap'); go.disabled = state.inventory.length===0; go.onclick = ()=>{ state.current=1; render(); };
+}
+
+/* ---------- Map ---------- */
+function renderMap(){
+  setStep(1);
+  stage.innerHTML = `
+    <div class="grid">
+      <div class="card">
+        <h2>Map – Ownership & Environment</h2>
+        <table class="table" id="mapTbl"><thead><tr>
+          <th>Endpoint</th><th>Owner</th><th>Backup</th><th>Conf.</th><th>Env</th><th>Stale?</th>
+        </tr></thead><tbody></tbody></table>
+        <div class="row" style="margin-top:8px">
+          <label class="pill">Confidence threshold
+            <input id="confThr" type="range" min="0" max="1" step="0.05" value="${state.confidenceThreshold}" />
+          </label>
+          <button class="btn" id="recalc">Re-evaluate</button>
+        </div>
+        <div class="right" style="margin-top:8px"><button class="btn" id="goPlan">Next: Plan →</button></div>
+      </div>
+      <div class="card">
+        <h2>KPIs</h2>
+        <div id="kpiList" class="row"></div>
+        <canvas id="kpiChart" aria-label="KPI Chart"></canvas>
+      </div>
+    </div>`;
+  document.getElementById('confThr').oninput=e=>{ state.confidenceThreshold=+e.target.value; renderMap(); };
+  document.getElementById('recalc').onclick=()=>renderMap();
+  document.getElementById('goPlan').onclick=()=>{ state.current=2; render(); };
+
+  const tbody = stage.querySelector('#mapTbl tbody');
+  let mapped=0, stale=0;
+  for (const c of state.inventory){
+    const ok=(c.owner?.confidence||0)>=state.confidenceThreshold; if(ok) mapped++; if(c.owner?.stale) stale++;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${c.endpoint}</td><td>${c.owner?.team||''}</td><td>${c.owner?.backup||''}</td>
+                  <td>${Math.round((c.owner?.confidence||0)*100)}%</td><td>${c.environment}</td>
+                  <td>${c.owner?.stale?'<span class="tagWARN">Stale</span>':'—'}</td>`;
+    tbody.appendChild(tr);
+  }
+  const estSurface=Math.max(5,Math.round(state.inventory.length*1.2));
+  const coverage=Math.round((state.inventory.length/estSurface)*100);
+  const kpis=[
+    {label:'Coverage vs surface', val: coverage+'%'},
+    {label:'Mapped ≥ threshold', val: `${mapped} / ${state.inventory.length}`},
+    {label:'Stale contacts', val: String(stale)},
+    {label:'≤30d expiring', val: String(state.inventory.filter(x=>expiryUrgency(x.notAfter)>=0.8).length)},
+    {label:'≤7d expiring', val: String(state.inventory.filter(x=>expiryUrgency(x.notAfter)>=0.95).length)},
+  ];
+  const kpiList=document.getElementById('kpiList');
+  for(const k of kpis){ const s=document.createElement('span'); s.className='pill'; s.textContent=`${k.label}: ${k.val}`; kpiList.appendChild(s); }
+  const ctx=document.getElementById('kpiChart').getContext('2d');
+  const buckets=[0,0,0,0,0]; for(const x of state.inventory){ buckets[Math.min(4,Math.floor(x.risk.score/20))]++; }
+  ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height); const w=ctx.canvas.width,h=ctx.canvas.height,pad=20,barW=(w-2*pad)/buckets.length-10;
+  ctx.fillStyle='#1f2937'; ctx.fillRect(0,0,w,h); ctx.fillStyle='#334155'; ctx.fillRect(pad,h-pad,w-2*pad,1);
+  buckets.forEach((v,i)=>{ const x=pad+i*(barW+10); const bh=(h-2*pad)*(v/Math.max(1,state.inventory.length)); ctx.fillStyle='#60a5fa'; ctx.fillRect(x,h-pad-bh,barW,bh); ctx.fillStyle='#9fb0c2'; ctx.fillText(`${i*20}-${(i+1)*20}`,x,h-6); });
+}
+
+/* ---------- Plan ---------- */
+function renderPlan(){
+  setStep(2);
+  stage.innerHTML = `
+    <div class="grid">
+      <div class="card">
+        <h2>Plan – PQC Migration & Risk</h2>
+        <div class="sliderRow"><div>Expiry urgency</div><input type="range" id="sExpiry" min="0" max="1" step="0.05" value="${state.sliders.expiry}"><div>${Math.round(state.sliders.expiry*100)}%</div></div>
+        <div class="sliderRow"><div>External exposure</div><input type="range" id="sExternal" min="0" max="1" step="0.05" value="${state.sliders.external}"><div>${Math.round(state.sliders.external*100)}%</div></div>
+        <div class="sliderRow"><div>Weak algorithms</div><input type="range" id="sWeak" min="0" max="1" step="0.05" value="${state.sliders.weakAlgo}"><div>${Math.round(state.sliders.weakAlgo*100)}%</div></div>
+        <div class="sliderRow"><div>RSA‑2048 upgrade</div><input type="range" id="sRsa" min="0" max="1" step="0.05" value="${state.sliders.rsa2048}"><div>${Math.round(state.sliders.rsa2048*100)}%</div></div>
+        <div class="row" style="margin-top:8px"><button class="btn" id="recalcPlan">Recalculate</button></div>
+        <table class="table" id="planTbl"><thead><tr>
+          <th>Endpoint</th><th>Risk</th><th>Priority</th><th>Recommendation</th>
+        </tr></thead><tbody></tbody></table>
+        <div class="right" style="margin-top:8px"><button class="btn" id="goExport">Next: Export →</button></div>
+      </div>
+      <div class="card">
+        <h2>Policy Notes</h2>
+        <ul>
+          <li>Prefer hybrid key exchange for Internet‑facing services.</li>
+          <li>Phase out SHA‑1/MD5; upgrade RSA‑2048 as an interim step when PQC is not yet available.</li>
+          <li>Track CA/platform support for PQC‑capable X.509 issuance before switching signing algorithms.</li>
+          <li>No private key material is ever processed.</li>
+        </ul>
+      </div>
+    </div>`;
+  ['sExpiry','sExternal','sWeak','sRsa'].forEach(id=>{
+    document.getElementById(id).oninput=e=>{
+      const key={sExpiry:'expiry',sExternal:'external',sWeak:'weakAlgo',sRsa:'rsa2048'}[id];
+      state.sliders[key]=+e.target.value;
+    };
+  });
+  document.getElementById('recalcPlan').onclick=()=>{
+    state.inventory=state.inventory.map(x=>({...x,risk:{...x.risk,score:riskScore(x)},pqc:{...x.pqc,priority:riskScore(x),recommendation:pqcRecommendation(x)}}));
+    renderPlan();
+  };
+  document.getElementById('goExport').onclick=()=>{ state.current=3; render(); };
+  const tbody=stage.querySelector('#planTbl tbody');
+  for(const c of [...state.inventory].sort((a,b)=>b.risk.score-a.risk.score)){
+    const sev=c.risk.score>=80?'tagBAD':c.risk.score>=60?'tagWARN':'tagOK';
+    const tr=document.createElement('tr'); tr.innerHTML=`<td>${c.endpoint}</td><td class="${sev}">${c.risk.score}</td><td>${c.pqc.priority}</td><td>${c.pqc.recommendation}</td>`; tbody.appendChild(tr);
+  }
+}
+
+/* ---------- Export ---------- */
+function renderExport(){
+  setStep(3);
+  stage.innerHTML = `
+    <div class="grid">
+      <div class="card">
+        <h2>Export – CBOM</h2>
+        <div class="row">
+          <button class="btn alt" id="exportJson">Export JSON</button>
+          <button class="btn" id="exportCsv">Export CSV</button>
+          <button class="btn ghost" id="backPlan">← Back to Plan</button>
+        </div>
+        <div class="field" style="margin-top:12px">
+          <label>Compliance Watermark (read‑only)</label>
+          <input type="text" value="${WATERMARK}" readonly>
+        </div>
+        <div class="field"><label>Preview</label><textarea readonly id="preview"></textarea></div>
+      </div>
+      <div class="card">
+        <h2>Data Model</h2>
+        <pre style="white-space:pre-wrap;background:#0b1220;border:1px solid #1f2a37;border-radius:10px;padding:10px">{
+  endpoint, cn, san[], issuer, serial, algorithm, keyBits, notBefore, notAfter, environment, external,
+  owner: { team, backup, confidence, stale },
+  risk:  { score, notes },
+  pqc:   { tagged, priority, recommendation },
+  provenance: [ sources ]
+}</pre>
+        <h2 style="margin-top:12px">Assurances</h2>
+        <ul>
+          <li>Processes public cert metadata only.</li>
+          <li>Anonymization ${state.anonymize? 'ON' : 'OFF'} by default.</li>
+          <li>Blocks private key material.</li>
+          <li>No persistence in Demo Mode.</li>
+        </ul>
+      </div>
+    </div>`;
+  document.getElementById('backPlan').onclick=()=>{ state.current=2; render(); };
+  document.getElementById('exportJson').onclick=()=>doExport('json');
+  document.getElementById('exportCsv').onclick=()=>doExport('csv');
+  document.getElementById('preview').value = JSON.stringify(state.inventory.slice(0,3), null, 2) + (state.inventory.length>3?'\n...':'');
+}
+function download(filename,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
+function toCsv(rows){
+  const header=['endpoint','cn','san','issuer','serial','algorithm','keyBits','notBefore','notAfter','environment','external','owner.team','owner.backup','owner.confidence','owner.stale','risk.score','pqc.priority','pqc.recommendation','provenance','watermark'];
+  const esc=v=>'"'+String(v).replace(/"/g,'""')+'"'; const lines=[header.join(',')];
+  for(const c of rows){
+    lines.push([c.endpoint,c.cn,(c.san||[]).join('|'),c.issuer,c.serial,c.algorithm,c.keyBits,c.notBefore,c.notAfter,c.environment,c.external,
+      c.owner?.team||'',c.owner?.backup||'',c.owner?.confidence||0,c.owner?.stale||false,c.risk?.score||0,c.pqc?.priority||0,c.pqc?.recommendation||'',(c.provenance||[]).join('|'),WATERMARK].map(esc).join(','));
+  }
+  return lines.join('\n');
+}
+function doExport(kind){
+  const ts=new Date().toISOString().replace(/[:.]/g,'-');
+  if(kind==='json'){ const out={watermark:WATERMARK,generatedAt:new Date().toISOString(),items:state.inventory}; download(`cbom-${ts}.json`,JSON.stringify(out,null,2),'application/json'); }
+  else download(`cbom-${ts}.csv`, toCsv(state.inventory), 'text/csv');
+}
+
+/* Boot */
+render();
+</script>
+</body>
+</html>
