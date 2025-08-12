@@ -249,6 +249,25 @@
     </section>
   </main>
 
+  <!-- Welcome Value Modal -->
+  <div id="welcome" class="fixed inset-0 bg-black/40 p-4 z-40">
+    <div class="max-w-2xl mx-auto bg-white rounded-2xl p-6 shadow-soft">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-blue-500"></div>
+        <div class="flex-1">
+          <h3 class="font-bold text-lg">Why this demo matters</h3>
+          <p class="text-sm text-gray-600 mt-1">Large organizations still miss certificate expirations and stall crypto upgrades because **coverage, ownership, and mapping** break as teams and platforms change. This tool shows how to generate a **Certificate Bill of Materials (CBOM)**, map owners with AI, and produce a **prioritized PQC migration plan**—in minutes, with **no private keys** and **no data leaving the browser**.</p>
+          <ul class="list-disc pl-5 mt-3 text-sm text-gray-700 space-y-1">
+            <li><span class="font-semibold">Prevent outages:</span> find certs across sources and tie each to a responsible team.</li>
+            <li><span class="font-semibold">Be PQC‑ready:</span> sequence a hybrid rollout for external/high‑value services first.</li>
+            <li><span class="font-semibold">Compliance‑friendly:</span> aligns with PCI DSS 4.0 crypto governance, NIST CSF PR.DS/PR.IP, ISO 27001 crypto controls.</li>
+          </ul>
+        </div>
+        <button id="closeWelcome" class="ml-4 px-3 py-2 rounded-lg border">Start</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Quick Guide Modal -->
   <div id="guide" class="fixed inset-0 hidden bg-black/40 p-4 z-40">
     <div class="max-w-2xl mx-auto bg-white rounded-2xl p-5 shadow-soft">
@@ -465,6 +484,10 @@ $('#closeGuide').addEventListener('click',()=> $('#guide').classList.add('hidden
 
 // Boot
 setStep(0); renderScan();
+// Show welcome value modal on load (no persistent storage used)
+window.addEventListener('load', ()=> { document.getElementById('welcome').classList.remove('hidden'); });
+$('#closeWelcome').addEventListener('click',()=> $('#welcome').classList.add('hidden'));
+
 </script>
 </body>
 </html>
