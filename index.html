@@ -1,540 +1,470 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ENTAQ · CBOM Demo — Scan · Map · Plan · Export</title>
+  <title>CBOM & PQC Planner — Privacy‑First Demo</title>
+  <meta name="description" content="Friendly, client‑side demo to inventory certificates (CBOM), map ownership, and plan PQC migration. No private keys, anonymization on by default." />
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Optional: PKIjs for PEM parsing (Lab Mode only) -->
+  <script src="https://unpkg.com/asn1js/dist/asn1js.min.js"></script>
+  <script src="https://unpkg.com/pvutils/dist/pvutils.min.js"></script>
+  <script src="https://unpkg.com/pkijs/build/pkijs.min.js"></script>
   <style>
-    :root{
-      /* ENTAQ light theme */
-      --bg:#ffffff; --card:#ffffff; --line:#e5e7eb;
-      --text:#0f172a; --muted:#46566b;
-      --primary:#0066cc; /* blue */
-      --accent:#ff6600;  /* orange */
-      --pill:#eef4ff; --pillText:#0f172a;
-      --ok:#16a34a; --warn:#f59e0b; --bad:#ef4444;
-    }
-    *{box-sizing:border-box} html,body{height:100%}
-    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif}
-    .wrap{max-width:1200px;margin:0 auto;padding:24px}
-    header{display:flex;gap:16px;align-items:center;justify-content:space-between}
-    .brand{display:flex;align-items:center;gap:12px}
-    .logo{width:36px;height:36px;border-radius:10px;background:radial-gradient(circle at 35% 35%,#60a5fa,transparent 40%),radial-gradient(circle at 70% 70%,#22d3ee,transparent 40%),linear-gradient(135deg,#0ea5e9 0%,#3b82f6 100%);box-shadow:0 0 0 2px #e2e8f0 inset, 0 6px 20px rgba(0,0,0,.08)}
-    h1{font-size:18px;margin:0}
-    .watermark{font-size:12px;color:var(--muted)}
-    .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:18px 0}
-    .step{background:var(--card);padding:10px 12px;border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;gap:10px;opacity:.95}
-    .step.active{outline:2px solid var(--primary)}
-    .step .idx{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:#eef2ff;color:#1d4ed8;border:1px solid var(--line)}
-    .grid{display:grid;grid-template-columns:1.1fr 1fr;gap:16px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(2,6,23,.04)}
-    .card h2{margin:0 0 12px 0;font-size:16px}
-    .row{display:flex;gap:10px;flex-wrap:wrap}
-    .pill{background:var(--pill);color:var(--pillText);padding:6px 10px;border-radius:999px;border:1px solid var(--line);font-size:12px}
-    .btn{appearance:none;border:none;background:#f8fafc;color:#0f172a;padding:10px 14px;border-radius:10px;border:1px solid var(--line);cursor:pointer}
-    .btn:hover{filter:brightness(0.98)}
-    .btn.alt{background:var(--primary);border-color:#0555a7;color:#fff;font-weight:600}
-    .btn.warn{background:var(--accent);border-color:#d45500;color:#fff;font-weight:600}
-    .btn.ghost{background:transparent;border:1px dashed var(--line);color:var(--muted)}
-    .field{display:flex;flex-direction:column;gap:6px;margin:8px 0}
-    label{color:var(--muted);font-size:12px}
-    input[type="text"], input[type="number"], textarea, select{width:100%;padding:10px 12px;border-radius:10px;background:#ffffff;color:var(--text);border:1px solid var(--line)}
-    textarea{min-height:90px;resize:vertical}
-    .table{width:100%;border-collapse:collapse}
-    .table th,.table td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;font-size:12px}
-    .right{text-align:right}
-    .sliderRow{display:grid;grid-template-columns:200px 1fr 60px;gap:10px;align-items:center}
-    .foot{margin-top:20px;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:12px}
-    canvas{width:100%;height:160px;background:#ffffff;border:1px solid var(--line);border-radius:10px}
-    .tagOK{color:var(--ok)} .tagWARN{color:var(--warn)} .tagBAD{color:var(--bad)}
-    details{border:1px solid var(--line);border-radius:10px;padding:10px;background:#ffffff}
-    details>summary{cursor:pointer}
-    @media (max-width: 980px){ .grid{grid-template-columns:1fr} }
+    :root { --brand:#2563eb; --brand-600:#2563eb; --brand-700:#1d4ed8; }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    .chip { @apply px-2 py-0.5 rounded-full text-xs font-semibold; }
+    .kbd { @apply inline-block px-1.5 py-0.5 rounded border bg-white text-xs text-gray-700; }
+    .shadow-soft { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
   </style>
 </head>
-<body>
-  <div class="wrap">
-    <header>
-      <div class="brand">
-        <div class="logo" aria-hidden="true"></div>
-        <div>
-          <h1>ENTAQ · CBOM Demo (Client‑Side)</h1>
-          <div class="watermark">"Generated from public certificate metadata; no private keys processed."</div>
+<body class="bg-gray-50 text-gray-900">
+  <!-- Top Bar -->
+  <div class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500"></div>
+      <div class="flex-1">
+        <h1 class="text-lg font-extrabold tracking-tight">CBOM & PQC Planner</h1>
+        <p class="text-xs text-gray-500">“Generated from public certificate metadata; no private keys processed.”</p>
+      </div>
+      <div class="hidden md:flex items-center gap-2">
+        <span class="chip bg-emerald-100 text-emerald-800">Privacy‑first</span>
+        <span class="chip bg-indigo-100 text-indigo-800">PQC‑aware</span>
+        <span class="chip bg-gray-100 text-gray-800">No data leaves browser</span>
+      </div>
+      <button id="openGuide" class="px-3 py-2 rounded-lg border text-sm hover:bg-gray-50">Quick Guide</button>
+    </div>
+  </div>
+
+  <main class="max-w-6xl mx-auto p-4">
+    <!-- Stepper -->
+    <ol class="grid grid-cols-4 gap-2 mb-4">
+      <li class="step active">
+        <div class="p-3 rounded-xl bg-white shadow-soft border flex items-center gap-3">
+          <div class="w-7 h-7 rounded-full bg-blue-600 text-white grid place-items-center text-sm">1</div>
+          <div>
+            <div class="font-semibold">Scan</div>
+            <div class="text-xs text-gray-500">Find certificates (simulated connectors)</div>
+          </div>
+        </div>
+      </li>
+      <li class="step">
+        <div class="p-3 rounded-xl bg-white shadow-soft border flex items-center gap-3">
+          <div class="w-7 h-7 rounded-full bg-gray-200 text-gray-700 grid place-items-center text-sm">2</div>
+          <div>
+            <div class="font-semibold">Map</div>
+            <div class="text-xs text-gray-500">AI suggests owner & environment</div>
+          </div>
+        </div>
+      </li>
+      <li class="step">
+        <div class="p-3 rounded-xl bg-white shadow-soft border flex items-center gap-3">
+          <div class="w-7 h-7 rounded-full bg-gray-200 text-gray-700 grid place-items-center text-sm">3</div>
+          <div>
+            <div class="font-semibold">Plan</div>
+            <div class="text-xs text-gray-500">Prioritize PQC / renewals</div>
+          </div>
+        </div>
+      </li>
+      <li class="step">
+        <div class="p-3 rounded-xl bg-white shadow-soft border flex items-center gap-3">
+          <div class="w-7 h-7 rounded-full bg-gray-200 text-gray-700 grid place-items-center text-sm">4</div>
+          <div>
+            <div class="font-semibold">Export</div>
+            <div class="text-xs text-gray-500">CBOM JSON/CSV</div>
+          </div>
+        </div>
+      </li>
+    </ol>
+
+    <!-- Panels -->
+    <section id="panel-scan" class="panel active grid md:grid-cols-2 gap-4">
+      <div class="bg-white rounded-2xl border shadow-soft p-5">
+        <h2 class="font-semibold text-lg mb-2">Step 1 · Where to look</h2>
+        <p class="text-sm text-gray-600 mb-4">Pick data sources to simulate discovery (in production these are read‑only connectors to your PKI, cloud cert stores, and edge). No uploads required.</p>
+        <div class="grid grid-cols-2 gap-2 mb-4">
+          <label class="flex items-center gap-2 p-2 rounded-lg border bg-gray-50"><input type="checkbox" class="conn" value="central" checked disabled> Central CA (simulated)</label>
+          <label class="flex items-center gap-2 p-2 rounded-lg border bg-gray-50"><input type="checkbox" class="conn" value="cloud" checked disabled> Cloud Cert Stores (sim.)</label>
+          <label class="flex items-center gap-2 p-2 rounded-lg border bg-gray-50"><input type="checkbox" class="conn" value="edge" checked disabled> Edge/CDN (sim.)</label>
+          <label class="flex items-center gap-2 p-2 rounded-lg border bg-gray-50"><input type="checkbox" class="conn" value="api" checked disabled> API Gateway (sim.)</label>
+          <label class="flex items-center gap-2 p-2 rounded-lg border bg-gray-50"><input type="checkbox" class="conn" value="mesh" checked disabled> Service Mesh (sim.)</label>
+          <label class="flex items-center gap-2 p-2 rounded-lg border bg-gray-50"><input type="checkbox" class="conn" value="dns" checked disabled> DNS/Passive (sim.)</label>
+        </div>
+
+        <div class="flex items-center gap-3 mb-4">
+          <button id="btnScan" class="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold">Run Demo Scan</button>
+          <button id="btnClear" class="px-4 py-3 rounded-xl border font-semibold hover:bg-gray-50">Clear</button>
+          <label class="flex items-center gap-2 ml-auto text-sm"><input id="anonymize" type="checkbox" checked> Anonymization ON</label>
+        </div>
+
+        <details class="mb-2">
+          <summary class="cursor-pointer select-none px-3 py-2 rounded-lg bg-white border font-semibold text-sm">Lab Mode (optional) — paste public certificate PEM or metadata JSON</summary>
+          <div class="mt-3 space-y-2">
+            <p class="text-sm text-emerald-700">Public certificates only. <span class="font-semibold">Never paste private keys.</span> The app blocks private‑key material.</p>
+            <textarea id="pemInput" class="w-full h-28 p-2 border rounded-lg text-xs" placeholder="-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----"></textarea>
+            <div class="flex items-center gap-2">
+              <button id="btnParsePem" class="px-4 py-2 rounded-lg bg-gray-900 text-white font-semibold">Add Certs</button>
+              <button id="btnLoadJson" class="px-4 py-2 rounded-lg border font-semibold">Load JSON</button>
+              <input id="fileJson" type="file" accept="application/json" class="text-sm" />
+            </div>
+          </div>
+        </details>
+
+        <p class="text-[11px] text-gray-500 mt-2">Compliance guardrails: PCI DSS 4.0 (crypto governance intent), NIST CSF PR.DS/PR.IP, ISO 27001 (asset & crypto controls). Demo runs 100% in your browser.</p>
+      </div>
+
+      <div class="bg-white rounded-2xl border shadow-soft p-5">
+        <div class="flex items-center mb-3">
+          <h2 class="font-semibold text-lg">Inventory Preview</h2>
+          <div class="ml-auto text-xs text-gray-500">Found: <span id="foundCount">0</span></div>
+        </div>
+        <div class="overflow-auto border rounded-xl">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-100 text-gray-700">
+              <tr>
+                <th class="px-3 py-2 text-left">Endpoint</th>
+                <th class="px-3 py-2 text-left">Common Name (CN)</th>
+                <th class="px-3 py-2 text-left">Algorithm</th>
+                <th class="px-3 py-2 text-left">Key Size</th>
+                <th class="px-3 py-2 text-left">Expires</th>
+                <th class="px-3 py-2 text-left">External</th>
+                <th class="px-3 py-2 text-left">Source</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyScan" class="divide-y"></tbody>
+          </table>
+        </div>
+        <div class="flex justify-end mt-4">
+          <button id="toMap" class="px-5 py-3 rounded-xl bg-blue-600 disabled:opacity-40 text-white font-semibold">Next: Map →</button>
         </div>
       </div>
-      <div class="row">
-        <span class="pill">Privacy‑first</span>
-        <span class="pill">PQC‑aware</span>
-        <span class="pill">No private keys</span>
-        <button class="btn ghost" id="btnRestart" title="Clear inventory and go back to Scan">Restart</button>
+    </section>
+
+    <section id="panel-map" class="panel hidden grid md:grid-cols-2 gap-4">
+      <div class="bg-white rounded-2xl border shadow-soft p-5">
+        <h2 class="font-semibold text-lg mb-2">Step 2 · Ownership & Environment</h2>
+        <p class="text-sm text-gray-600 mb-4">An AI correlator suggests <span class="font-semibold">owner, backup, and environment</span> using names/tags. Low‑confidence items are flagged for attestation.</p>
+        <div id="ownershipStats" class="grid grid-cols-3 gap-3 mb-3"></div>
+        <div class="overflow-auto border rounded-xl">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-100 text-gray-700">
+              <tr>
+                <th class="px-3 py-2 text-left">Endpoint</th>
+                <th class="px-3 py-2 text-left">Owner</th>
+                <th class="px-3 py-2 text-left">Backup</th>
+                <th class="px-3 py-2 text-left">Env</th>
+                <th class="px-3 py-2 text-left">Confidence</th>
+                <th class="px-3 py-2 text-left">Status</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyMap" class="divide-y"></tbody>
+          </table>
+        </div>
+        <div class="flex justify-between mt-4">
+          <button class="px-4 py-3 rounded-xl border font-semibold" data-back>← Back</button>
+          <button id="toPlan" class="px-5 py-3 rounded-xl bg-blue-600 text-white font-semibold">Next: Plan →</button>
+        </div>
       </div>
-    </header>
 
-    <nav class="steps" id="steps">
-      <div class="step active"><div class="idx">1</div> Scan</div>
-      <div class="step"><div class="idx">2</div> Map</div>
-      <div class="step"><div class="idx">3</div> Plan</div>
-      <div class="step"><div class="idx">4</div> Export</div>
-    </nav>
+      <div class="bg-white rounded-2xl border shadow-soft p-5">
+        <h3 class="font-semibold mb-2">Why ownership mapping prevents outages</h3>
+        <ul class="list-disc pl-5 text-sm text-gray-700 space-y-1">
+          <li>Alerts reach the right humans even when people change roles.</li>
+          <li>Every cert is tied to a service and environment for faster action.</li>
+          <li>Low‑confidence mappings are clearly flagged for attestation.</li>
+        </ul>
+        <div class="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-sm">Tip: In production, connectors read metadata from PKI, cloud, and edge; the AI correlator uses service catalog, repos, and tickets. This demo simulates that behavior.</div>
+      </div>
+    </section>
 
-    <section id="stage"></section>
+    <section id="panel-plan" class="panel hidden grid md:grid-cols-2 gap-4">
+      <div class="bg-white rounded-2xl border shadow-soft p-5">
+        <h2 class="font-semibold text-lg mb-1">Step 3 · PQC & Renewal Planning</h2>
+        <p class="text-sm text-gray-600 mb-4">Adjust policy sliders to prioritize external, high‑value, and soon‑to‑expire services. Output is a hybrid (classical+PQC) rollout order.</p>
+        <div class="grid grid-cols-2 gap-4 mb-4 text-sm">
+          <label class="block">External exposure
+            <input id="wExternal" type="range" min="0" max="60" value="40" class="w-full">
+          </label>
+          <label class="block">Expiry urgency
+            <input id="wExpiry" type="range" min="0" max="60" value="30" class="w-full">
+          </label>
+          <label class="block">Weak algorithms
+            <input id="wWeak" type="range" min="0" max="60" value="20" class="w-full">
+          </label>
+          <label class="block">RSA‑2048 uplift
+            <input id="wRsa" type="range" min="0" max="20" value="5" class="w-full">
+          </label>
+        </div>
+        <div class="overflow-auto border rounded-xl">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-100 text-gray-700">
+              <tr>
+                <th class="px-3 py-2 text-left">Service / Endpoint</th>
+                <th class="px-3 py-2 text-left">Reason</th>
+                <th class="px-3 py-2 text-left">Priority</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyPlan" class="divide-y"></tbody>
+          </table>
+        </div>
+        <div class="flex justify-between mt-4">
+          <button class="px-4 py-3 rounded-xl border font-semibold" data-back>← Back</button>
+          <button id="toExport" class="px-5 py-3 rounded-xl bg-blue-600 text-white font-semibold">Next: Export →</button>
+        </div>
+      </div>
 
-    <div class="foot">
-      <div>Compliance guardrails: PCI DSS 4.0 (crypto governance), NIST CSF PR.DS/PR.IP, ISO 27001 (asset & crypto controls).</div>
-      <div><span class="pill">Demo Mode</span></div>
+      <div class="bg-white rounded-2xl border shadow-soft p-5">
+        <h3 class="font-semibold mb-2">At‑a‑glance health</h3>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="p-3 border rounded-xl">
+            <div class="text-xs text-gray-500">Expiry distribution</div>
+            <canvas id="expiryChart"></canvas>
+          </div>
+          <div class="p-3 border rounded-xl">
+            <div class="text-xs text-gray-500">Algorithm / key size</div>
+            <canvas id="algoChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-export" class="panel hidden">
+      <div class="bg-white rounded-2xl border shadow-soft p-5">
+        <h2 class="font-semibold text-lg mb-2">Step 4 · Export CBOM</h2>
+        <p class="text-sm text-gray-600 mb-4">Download your Certificate Bill of Materials with provenance, policy notes, and anonymization state.</p>
+        <div class="flex items-center gap-3 mb-3">
+          <button id="btnExportJson" class="px-5 py-3 rounded-xl bg-blue-600 text-white font-semibold">Download CBOM (JSON)</button>
+          <button id="btnExportCsv" class="px-5 py-3 rounded-xl border font-semibold">Download Inventory (CSV)</button>
+          <label class="flex items-center gap-2 ml-auto text-sm"><input id="exportAnon" type="checkbox" checked> Keep anonymized</label>
+        </div>
+        <div class="text-xs text-gray-500">Watermark: “Generated from public certificate metadata; no private keys processed.”</div>
+        <div class="mt-6">
+          <button class="px-4 py-3 rounded-xl border font-semibold" data-back>← Back</button>
+          <button id="btnRestart" class="px-4 py-3 rounded-xl bg-gray-900 text-white font-semibold ml-2">Restart</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Quick Guide Modal -->
+  <div id="guide" class="fixed inset-0 hidden bg-black/40 p-4 z-40">
+    <div class="max-w-2xl mx-auto bg-white rounded-2xl p-5 shadow-soft">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500"></div>
+        <div>
+          <h3 class="font-bold text-lg">How to use this demo</h3>
+          <p class="text-sm text-gray-600">Four simple steps. Everything runs in your browser. Public certificate data only.</p>
+        </div>
+        <button id="closeGuide" class="ml-auto px-3 py-2 rounded-lg border">Close</button>
+      </div>
+      <ol class="mt-3 space-y-2 text-sm list-decimal pl-5">
+        <li><span class="font-semibold">Scan</span>: Click <em>Run Demo Scan</em> to simulate finding certs across common sources.</li>
+        <li><span class="font-semibold">Map</span>: The AI correlator proposes owner, backup, and environment with a confidence score.</li>
+        <li><span class="font-semibold">Plan</span>: Tune PQC policy sliders; see a prioritized hybrid rollout order.</li>
+        <li><span class="font-semibold">Export</span>: Download CBOM (JSON) or Inventory (CSV) with a compliance watermark.</li>
+      </ol>
+      <div class="mt-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-900">Security defaults: anonymization ON; private‑key patterns blocked; no persistence; no network calls in demo.</div>
     </div>
   </div>
 
 <script>
-/* ===========================================================
-   Constants & State
-   =========================================================== */
-const WATERMARK = "Generated from public certificate metadata; no private keys processed.";
-const state = {
-  mode: 'DEMO',
-  inventory: [],
-  sliders: { expiry: 0.6, external: 0.7, weakAlgo: 0.9, rsa2048: 0.5 },
-  anonymize: true,
-  confidenceThreshold: 0.7,
-  current: 0
-};
+// --------------------- Utilities & Sample Data ---------------------
+const $ = (q) => document.querySelector(q);
+const $$ = (q) => Array.from(document.querySelectorAll(q));
+const fmtDate = (iso) => new Date(iso).toLocaleDateString();
+const daysUntil = (iso) => Math.ceil((new Date(iso)-new Date())/86400000);
+const addDays = (n) => { const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString(); };
+function anonymizeStr(s){ return (s||'').replace(/[A-Za-z0-9]/g,'•'); }
+function download(name, text, type='text/plain'){ const blob=new Blob([text],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
 
-/* Restart (header button) */
-document.addEventListener('click', (e)=>{
-  if (e.target && e.target.id === 'btnRestart'){
-    state.inventory = [];
-    state.anonymize = true;
-    state.sliders = { expiry: 0.6, external: 0.7, weakAlgo: 0.9, rsa2048: 0.5 };
-    state.confidenceThreshold = 0.7;
-    state.current = 0;
-    render();
-  }
-});
+// Sample, diverse inventory across connectors
+const SAMPLE_ITEMS=[
+  {endpoint:'dns:api.payments.example',cn:'api.payments.example',san:['api.payments.example'],issuer:'Org-CA',serial:'A1',algorithm:'RSA',keyBits:2048,notAfter:addDays(20),environment:'prod',external:true,provenance:['central','edge']},
+  {endpoint:'lb:orders.edge',cn:'orders.example',san:['orders.example'],issuer:'Public-CA',serial:'B1',algorithm:'ECDSA',keyBits:256,notAfter:addDays(280),environment:'prod',external:true,provenance:['edge','cloud']},
+  {endpoint:'svc:vault.internal',cn:'vault.internal',san:['vault.internal'],issuer:'Org-CA',serial:'C1',algorithm:'RSA',keyBits:1024,notAfter:addDays(400),environment:'core',external:false,provenance:['central']},
+  {endpoint:'api:ml-infer',cn:'ml-infer.internal',san:['ml-infer.internal'],issuer:'Edge-CA',serial:'D1',algorithm:'RSA',keyBits:4096,notAfter:addDays(5),environment:'prod',external:true,provenance:['api','mesh']},
+];
 
-/* ===========================================================
-   Utilities
-   =========================================================== */
-async function sha256Hex(text){
-  if (crypto?.subtle){
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
-  }
-  let h=5381; for(let i=0;i<text.length;i++){h=((h<<5)+h)+text.charCodeAt(i)|0} return ('00000000'+(h>>>0).toString(16)).slice(-8);
-}
-function isWeakAlgo(alg,bits){ const a=(alg||'').toUpperCase(); if(a.includes('SHA1')||a.includes('MD5')) return true; if(a.includes('RSA')) return (bits||0)<2048; return false; }
-function expiryUrgency(notAfter){
-  const now=Date.now(), exp=new Date(notAfter).getTime(); const days=(exp-now)/(1000*3600*24);
-  if (isNaN(days)) return 0.3; if (days<=0) return 1; if (days<=7) return 0.95; if (days<=30) return 0.8; if (days<=90) return 0.6; if (days<=180) return 0.4; return 0.2;
-}
-function riskScore(cert){
-  const w = state.sliders;
-  const exp = expiryUrgency(cert.notAfter);
-  const weak = isWeakAlgo(cert.algorithm, cert.keyBits) ? 1 : 0;
-  const ext = cert.external ? 1 : 0;
-  const rsaUp = (/RSA/i.test(cert.algorithm) && (cert.keyBits||0)===2048) ? 1 : 0;
-  const s = (w.expiry*exp + w.weakAlgo*weak + w.external*ext + w.rsa2048*rsaUp) / (w.expiry+w.weakAlgo+w.external+w.rsa2048);
-  return Math.round(s*100);
-}
-function pqcRecommendation(c){
-  const out=[];
-  if (c.external) out.push('Prioritize Hybrid TLS key exchange (classical + KEM)');
-  if (/RSA|ECDSA/i.test(c.algorithm)) out.push('Plan X.509 signature agility; target PQC‑capable CAs when available');
-  if (/RSA/i.test(c.algorithm) && c.keyBits===2048) out.push('Interim: upgrade to RSA‑3072/3840 or ECDSA P‑256 while planning PQC');
-  if (!out.length) out.push('Monitor; standard refresh with PQC readiness checks');
-  return out.join(' · ');
-}
-async function mapOwnership(cert){
-  const key = await sha256Hex((cert.cn||'')+'|'+(cert.endpoint||''));
-  const teams=['Payments','Core-API','Mobile','Web','Edge','Data','Infra','SRE'];
-  const idx=parseInt(key.slice(0,2),16)%teams.length;
-  const conf=(parseInt(key.slice(2,4),16)%51+50)/100; const stale=(parseInt(key.slice(4,6),16)%10)<3;
-  return { owner:{team:teams[idx],backup:teams[(idx+1)%teams.length],confidence:conf,stale}, environment:['prod','stage','dev'][parseInt(key.slice(6,8),16)%3] };
-}
-async function anonymizeFields(cert){
-  if (!state.anonymize) return cert;
-  const c={...cert};
-  if (c.cn) c.cn='CN#'+(await sha256Hex(c.cn)).slice(0,12);
-  if (Array.isArray(c.san)) c.san = await Promise.all(c.san.map(async s=>'SAN#'+(await sha256Hex(String(s))).slice(0,12)));
-  if (c.endpoint) c.endpoint=(await sha256Hex(c.endpoint)).slice(0,12)+'.endpoint';
-  return c;
-}
-async function finalizeEntry(raw){
-  const mapped = await mapOwnership(raw);
-  const base = {...raw, ...mapped};
-  const entry = {
-    endpoint: base.endpoint||'', cn: base.cn||'', san: base.san||[], issuer: base.issuer||'', serial: base.serial||'',
-    algorithm: base.algorithm||'', keyBits: base.keyBits||0, notBefore: base.notBefore||'', notAfter: base.notAfter||'',
-    environment: base.environment||'dev', external: !!base.external,
-    owner: base.owner, risk:{score:0,notes:[]}, pqc:{tagged:true,priority:0,recommendation:''}, provenance: base.provenance||[]
-  };
-  entry.risk.score = riskScore(entry);
-  entry.pqc.priority = entry.risk.score;
-  entry.pqc.recommendation = pqcRecommendation(entry);
-  return state.anonymize ? await anonymizeFields(entry) : entry;
-}
-function looksLikePrivateKey(t){ return [/BEGIN\s+PRIVATE\s+KEY/i,/BEGIN\s+RSA\s+PRIVATE\s+KEY/i,/BEGIN\s+EC\s+PRIVATE\s+KEY/i,/BEGIN\s+ENCRYPTED\s+PRIVATE\s+KEY/i].some(re=>re.test(t||'')); }
+// --------------------- State ---------------------
+let state={ items:[], mapped:[], plan:[], anonymize:true };
 
-/* ===========================================================
-   jsrsasign-based Self-signed Certificate Generator
-   =========================================================== */
-async function ensureJsrsasign(){
-  if (window.KJUR && window.KEYUTIL) return true;
-  await new Promise((resolve,reject)=>{
-    const s=document.createElement('script');
-    s.src='https://cdn.jsdelivr.net/npm/jsrsasign@10.9.0/lib/jsrsasign-all-min.js';
-    s.onload=()=>resolve(true); s.onerror=()=>reject(new Error('Failed to load jsrsasign')); document.head.appendChild(s);
+function setStep(i){
+  $$('.step').forEach((el,idx)=>{
+    const num=el.querySelector('.w-7');
+    if(idx===i){ el.classList.add('active'); num.classList.remove('bg-gray-200','text-gray-700'); num.classList.add('bg-blue-600','text-white'); }
+    else { el.classList.remove('active'); num.classList.add('bg-gray-200','text-gray-700'); num.classList.remove('bg-blue-600','text-white'); }
   });
-  return true;
-}
-async function generateSelfSigned({cn='ENTAQ Demo', san='', alg='ECDSA'}){
-  await ensureJsrsasign();
-
-  let kp, sigAlg, keyUsageBin;
-  if (alg === 'RSA') {
-    kp = KEYUTIL.generateKeypair('RSA', 2048);
-    sigAlg = 'SHA256withRSA';
-    keyUsageBin = '00000110'; // digitalSignature + keyEncipherment
-  } else {
-    kp = KEYUTIL.generateKeypair('EC', 'secp256r1'); // P‑256
-    sigAlg = 'SHA256withECDSA';
-    keyUsageBin = '00100100'; // digitalSignature + keyAgreement
-  }
-
-  const nowSec   = KJUR.jws.IntDate.getNow();
-  const notbefore = KJUR.jws.IntDate.intDate2Zulu(nowSec);
-  const notafter  = KJUR.jws.IntDate.intDate2Zulu(nowSec + 365*24*3600);
-
-  const ext = [
-    { extname: "basicConstraints", cA: false },
-    { extname: "keyUsage", bin: keyUsageBin }
-  ];
-  if (san) ext.push({ extname: "subjectAltName", array: [{ dns: san }] });
-
-  const pem = KJUR.asn1.x509.X509Util.newCertPEM({
-    serial:    { int: String(Math.floor(Date.now()/1000)) },
-    sigalg:    sigAlg,
-    issuer:    { str: `/CN=${cn}` },
-    subject:   { str: `/CN=${cn}` },
-    notbefore, notafter,
-    sbjpubkey: kp.pubKeyObj,
-    ext,
-    cakey:     kp.prvKeyObj
-  });
-
-  const nowIso = new Date().toISOString().slice(0,10);
-  const naIso  = new Date(Date.now()+365*864e5).toISOString().slice(0,10);
-  const metadata = {
-    endpoint: (san || cn) + ':443',
-    cn, san: san ? [san] : [],
-    issuer: cn, serial: String(Math.floor(Date.now()/1000)),
-    algorithm: (alg === 'RSA' ? 'RSA' : 'ECDSA P-256'),
-    keyBits: (alg === 'RSA' ? 2048 : 256),
-    notBefore: nowIso, notAfter: naIso,
-    environment: 'dev', external: true,
-    provenance: ['gen:self-signed']
-  };
-  return { pem, metadata };
+  $$('#panel-scan, #panel-map, #panel-plan, #panel-export').forEach(p=>p.classList.add('hidden'));
+  [$('#panel-scan'), $('#panel-map'), $('#panel-plan'), $('#panel-export')][i].classList.remove('hidden');
 }
 
-/* ===========================================================
-   Demo Data
-   =========================================================== */
-function demoPool(){
-  const now=Date.now(), days=d=>new Date(now+d*86400000).toISOString().slice(0,10);
-  return [
-    {endpoint:'api.example.com:443', cn:'api.example.com', san:['api.example.com','api.internal'], issuer:'Example CA R3', serial:'01A3F4', algorithm:'RSA', keyBits:2048, notBefore:days(-300), notAfter:days(20), environment:'prod', external:true, provenance:['sim:gateway']},
-    {endpoint:'edge.example.net:443', cn:'edge.example.net', san:['cdn.example.net'], issuer:'Example CA R4', serial:'09BC22', algorithm:'ECDSA P-256', keyBits:256, notBefore:days(-100), notAfter:days(200), environment:'prod', external:true, provenance:['sim:cdn']},
-    {endpoint:'svc.internal:8443', cn:'svc.internal', san:['svc','svc.cluster.local'], issuer:'Corp-CA-01', serial:'7733AA', algorithm:'RSA', keyBits:4096, notBefore:days(-700), notAfter:days(90), environment:'stage', external:false, provenance:['sim:mesh']},
-    {endpoint:'db.internal:5432', cn:'db.internal', san:['db','db.cluster'], issuer:'Corp-CA-01', serial:'88FF29', algorithm:'RSA', keyBits:2048, notBefore:days(-800), notAfter:days(6), environment:'prod', external:false, provenance:['sim:cmdb']},
-    {endpoint:'mobile.example.com:443', cn:'mobile.example.com', san:['m.example.com'], issuer:'Example CA R3', serial:'19DC77', algorithm:'RSA', keyBits:2048, notBefore:days(-400), notAfter:days(380), environment:'prod', external:true, provenance:['sim:app']}
-  ];
-}
-
-/* ===========================================================
-   Rendering
-   =========================================================== */
-const stage = document.getElementById('stage');
-const steps = Array.from(document.querySelectorAll('#steps .step'));
-function setStep(i){ steps.forEach((el,idx)=>el.classList.toggle('active', idx===i)); }
-function render(){ if(state.current===1) return renderMap(); if(state.current===2) return renderPlan(); if(state.current===3) return renderExport(); return renderScan(); }
-
-/* ---------- Scan ---------- */
+// --------------------- Scan Panel ---------------------
 function renderScan(){
-  setStep(0);
-  stage.innerHTML = `
-    <div class="grid">
-      <div class="card">
-        <h2>Scan – Select Connectors</h2>
-        <div class="row">
-          <label class="pill"><input type="checkbox" checked disabled /> Simulated: CA</label>
-          <label class="pill"><input type="checkbox" checked disabled /> Simulated: CDN</label>
-          <label class="pill"><input type="checkbox" checked disabled /> Simulated: API Gateway</label>
-          <label class="pill"><input type="checkbox" checked disabled /> Simulated: Service Mesh</label>
-          <label class="pill"><input type="checkbox" checked disabled /> Simulated: DNS</label>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <button class="btn alt" id="btnRun">Run Demo Scan</button>
-          <button class="btn" id="btnClear">Clear</button>
-          <label class="pill"><input id="anonToggle" type="checkbox" ${state.anonymize?'checked':''}/> Anonymization ON</label>
-        </div>
-
-        <details style="margin-top:12px">
-          <summary>Lab Mode (optional) – Paste public certificate PEM or metadata JSON</summary>
-          <div class="field">
-            <label>Paste PEM (certificate only) or metadata JSON array. <span class="muted">Private key material is blocked.</span></label>
-            <textarea id="labInput" placeholder="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n\nOR\n\n[{\n  &quot;endpoint&quot;: &quot;api.example:443&quot;,\n  &quot;cn&quot;: &quot;api.example&quot;,\n  &quot;san&quot;:[&quot;api.example&quot;],\n  &quot;issuer&quot;: &quot;Example CA&quot;,\n  &quot;serial&quot;: &quot;01A3&quot;,\n  &quot;algorithm&quot;: &quot;RSA&quot;,\n  &quot;keyBits&quot;: 2048,\n  &quot;notBefore&quot;: &quot;2024-01-01&quot;,\n  &quot;notAfter&quot;: &quot;2025-12-31&quot;,\n  &quot;external&quot;: true,\n  &quot;provenance&quot;:[&quot;lab:manual&quot;]\n}]"></textarea>
-          </div>
-          <div class="row">
-            <button class="btn" id="btnLabParse">Import Metadata</button>
-            <span class="pill" id="labWarn" style="border-style:dashed"></span>
-          </div>
-        </details>
-
-        <details style="margin-top:12px">
-          <summary>Generate demo certificate (PEM) – self‑signed (ECDSA or RSA)</summary>
-          <div class="row" style="margin:8px 0">
-            <input class="grow" id="genCN"  placeholder="Common Name (e.g., entaq.local)"/>
-            <input class="grow" id="genSAN" placeholder="SAN (optional DNS)"/>
-            <select id="genALG"><option value="ECDSA">ECDSA P-256</option><option value="RSA">RSA 2048</option></select>
-          </div>
-          <div class="row">
-            <button class="btn" id="btnGenPem">Generate PEM</button>
-            <button class="btn ghost" id="btnAddInv" disabled>Add to Inventory</button>
-            <button class="btn" id="btnDlPem" disabled>Download PEM</button>
-          </div>
-          <div class="field">
-            <label>PEM Preview (public cert only)</label>
-            <textarea id="genPEM" readonly placeholder="PEM will appear here…"></textarea>
-          </div>
-        </details>
-      </div>
-
-      <div class="card">
-        <h2>Inventory Preview</h2>
-        <table class="table" id="tableInv"><thead><tr>
-          <th>Endpoint</th><th>CN</th><th>Alg</th><th>Bits</th><th>Not After</th><th>Ext</th><th>Prov</th>
-        </tr></thead><tbody></tbody></table>
-        <div class="right" style="margin-top:8px"><button class="btn alt" id="goMap" disabled>Next: Map →</button></div>
-      </div>
-    </div>`;
-
-  // handlers
-  document.getElementById('anonToggle').onchange = e=>{ state.anonymize = e.target.checked; render(); };
-  document.getElementById('btnClear').onclick = ()=>{ state.inventory=[]; render(); };
-  document.getElementById('btnRun').onclick = async ()=>{
-    const pool = demoPool(); const out=[];
-    for (const r of pool) out.push(await finalizeEntry(r));
-    state.inventory = out; render();
-  };
-  document.getElementById('btnLabParse').onclick = async ()=>{
-    const ta=document.getElementById('labInput'), warn=document.getElementById('labWarn'); const raw=ta.value.trim(); warn.textContent='';
-    if (!raw) return;
-    if (looksLikePrivateKey(raw)){ warn.textContent='Blocked: input resembles private key material.'; return; }
-    try{
-      if (raw.startsWith('[')){ const parsed=JSON.parse(raw); const out=[]; for(const i of parsed) out.push(await finalizeEntry(i)); state.inventory=out; render(); return; }
-    }catch(e){/* try PEM path next */}
-    if (/BEGIN\s+CERTIFICATE/i.test(raw)){
-      const certs = raw.split(/-----END CERTIFICATE-----/i).filter(x=>x.includes('BEGIN CERTIFICATE'));
-      const out=[]; for (const c of certs){
-        const fp=(await sha256Hex(c.replace(/\r|\n|\s/g,''))).slice(0,16);
-        out.push(await finalizeEntry({endpoint:'unknown:443', cn:'unknown', san:[], issuer:'unknown', serial:fp.toUpperCase(), algorithm:'unknown', keyBits:0, environment:'dev', external:false, provenance:['lab:pem']}));
-      }
-      state.inventory=out; render(); return;
-    }
-    warn.textContent='Unsupported input. Provide metadata JSON array or certificate PEM (no private keys).';
-  };
-
-  // generator
-  const btnGen = document.getElementById('btnGenPem');
-  const btnAdd = document.getElementById('btnAddInv');
-  const btnDl  = document.getElementById('btnDlPem');
-  const taPem  = document.getElementById('genPEM');
-
-  btnGen.onclick = async ()=>{
-    btnGen.disabled=true; btnAdd.disabled=true; btnDl.disabled=true; taPem.value='Generating…';
-    try{
-      const cn=(document.getElementById('genCN').value||'').trim()||'ENTAQ Demo';
-      const san=(document.getElementById('genSAN').value||'').trim();
-      const alg=(document.getElementById('genALG').value||'ECDSA');
-      const {pem, metadata} = await generateSelfSigned({cn,san,alg});
-      taPem.value=pem; btnAdd._meta = metadata; btnAdd.disabled=false; btnDl.disabled=false;
-    }catch(err){ taPem.value='Error: '+(err?.message||String(err)); }
-    finally{ btnGen.disabled=false; }
-  };
-  btnAdd.onclick = async ()=>{ if(!btnAdd._meta) return; const entry=await finalizeEntry(btnAdd._meta); state.inventory=[...state.inventory, entry]; render(); };
-  btnDl.onclick = ()=>{ if(!taPem.value) return; const blob=new Blob([taPem.value],{type:'application/x-pem-file'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='entaq-demo-cert.pem'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1200); };
-
-  // table + next
-  const tbody = stage.querySelector('#tableInv tbody');
-  for (const c of state.inventory){
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${c.endpoint}</td><td>${c.cn}</td><td>${c.algorithm}</td><td>${c.keyBits}</td><td>${c.notAfter||''}</td><td>${c.external?'Yes':'No'}</td><td>${(c.provenance||[]).join(',')}</td>`;
+  const tbody=$('#tbodyScan');
+  tbody.innerHTML='';
+  const data=state.items;
+  $('#foundCount').textContent=data.length;
+  data.forEach(x=>{
+    const tr=document.createElement('tr'); tr.className='hover:bg-gray-50';
+    const CN=state.anonymize?anonymizeStr(x.cn):x.cn;
+    tr.innerHTML=`<td class="px-3 py-2">${x.endpoint}</td>
+      <td class="px-3 py-2">${CN}</td>
+      <td class="px-3 py-2">${x.algorithm}</td>
+      <td class="px-3 py-2">${x.keyBits||''}</td>
+      <td class="px-3 py-2">${fmtDate(x.notAfter)}</td>
+      <td class="px-3 py-2">${x.external?'Yes':'No'}</td>
+      <td class="px-3 py-2">${(x.provenance||[]).join(', ')}</td>`;
     tbody.appendChild(tr);
-  }
-  const go = stage.querySelector('#goMap'); go.disabled = state.inventory.length===0; go.onclick = ()=>{ state.current=1; render(); };
-}
-
-/* ---------- Map ---------- */
-function renderMap(){
-  setStep(1);
-  stage.innerHTML = `
-    <div class="grid">
-      <div class="card">
-        <h2>Map – Ownership & Environment</h2>
-        <table class="table" id="mapTbl"><thead><tr>
-          <th>Endpoint</th><th>Owner</th><th>Backup</th><th>Conf.</th><th>Env</th><th>Stale?</th>
-        </tr></thead><tbody></tbody></table>
-        <div class="row" style="margin-top:8px;justify-content:space-between">
-          <button class="btn" id="backScan">← Back to Scan</button>
-          <div class="row">
-            <label class="pill">Confidence threshold
-              <input id="confThr" type="range" min="0" max="1" step="0.05" value="${state.confidenceThreshold}" />
-            </label>
-            <button class="btn alt" id="goPlan">Next: Plan →</button>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <h2>KPIs</h2>
-        <div id="kpiList" class="row"></div>
-        <canvas id="kpiChart" aria-label="KPI Chart"></canvas>
-      </div>
-    </div>`;
-  document.getElementById('confThr').oninput=e=>{ state.confidenceThreshold=+e.target.value; renderMap(); };
-  document.getElementById('backScan').onclick=()=>{ state.current=0; render(); };
-  document.getElementById('goPlan').onclick=()=>{ state.current=2; render(); };
-
-  const tbody = stage.querySelector('#mapTbl tbody');
-  let mapped=0, stale=0;
-  for (const c of state.inventory){
-    const ok=(c.owner?.confidence||0)>=state.confidenceThreshold; if(ok) mapped++; if(c.owner?.stale) stale++;
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${c.endpoint}</td><td>${c.owner?.team||''}</td><td>${c.owner?.backup||''}</td>
-                  <td>${Math.round((c.owner?.confidence||0)*100)}%</td><td>${c.environment}</td>
-                  <td>${c.owner?.stale?'<span class="tagWARN">Stale</span>':'—'}</td>`;
-    tbody.appendChild(tr);
-  }
-  const estSurface=Math.max(5,Math.round(state.inventory.length*1.2));
-  const coverage=Math.round((state.inventory.length/estSurface)*100);
-  const kpis=[
-    {label:'Coverage vs surface', val: coverage+'%'},
-    {label:'Mapped ≥ threshold', val: `${mapped} / ${state.inventory.length}`},
-    {label:'Stale contacts', val: String(stale)},
-    {label:'≤30d expiring', val: String(state.inventory.filter(x=>expiryUrgency(x.notAfter)>=0.8).length)},
-    {label:'≤7d expiring', val: String(state.inventory.filter(x=>expiryUrgency(x.notAfter)>=0.95).length)},
-  ];
-  const kpiList=document.getElementById('kpiList');
-  for(const k of kpis){ const s=document.createElement('span'); s.className='pill'; s.textContent=`${k.label}: ${k.val}`; kpiList.appendChild(s); }
-  const ctx=document.getElementById('kpiChart').getContext('2d');
-  const buckets=[0,0,0,0,0]; for(const x of state.inventory){ buckets[Math.min(4,Math.floor(x.risk.score/20))]++; }
-  ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height); const w=ctx.canvas.width,h=ctx.canvas.height,pad=20,barW=(w-2*pad)/buckets.length-10;
-  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,w,h); ctx.fillStyle='#cbd5e1'; ctx.fillRect(pad,h-pad,w-2*pad,1);
-  buckets.forEach((v,i)=>{ const x=pad+i*(barW+10); const bh=(h-2*pad)*(v/Math.max(1,state.inventory.length)); ctx.fillStyle= (i>=3?'#f97316':'#3b82f6'); ctx.fillRect(x,h-pad-bh,barW,bh); ctx.fillStyle='#64748b'; ctx.fillText(`${i*20}-${(i+1)*20}`,x,h-6); });
-}
-
-/* ---------- Plan ---------- */
-function renderPlan(){
-  setStep(2);
-  stage.innerHTML = `
-    <div class="grid">
-      <div class="card">
-        <h2>Plan – PQC Migration & Risk</h2>
-        <div class="sliderRow"><div>Expiry urgency</div><input type="range" id="sExpiry" min="0" max="1" step="0.05" value="${state.sliders.expiry}"><div>${Math.round(state.sliders.expiry*100)}%</div></div>
-        <div class="sliderRow"><div>External exposure</div><input type="range" id="sExternal" min="0" max="1" step="0.05" value="${state.sliders.external}"><div>${Math.round(state.sliders.external*100)}%</div></div>
-        <div class="sliderRow"><div>Weak algorithms</div><input type="range" id="sWeak" min="0" max="1" step="0.05" value="${state.sliders.weakAlgo}"><div>${Math.round(state.sliders.weakAlgo*100)}%</div></div>
-        <div class="sliderRow"><div>RSA‑2048 upgrade</div><input type="range" id="sRsa" min="0" max="1" step="0.05" value="${state.sliders.rsa2048}"><div>${Math.round(state.sliders.rsa2048*100)}%</div></div>
-        <div class="row" style="margin-top:8px;justify-content:space-between">
-          <button class="btn" id="backMap">← Back to Map</button>
-          <button class="btn alt" id="goExport">Next: Export →</button>
-        </div>
-        <table class="table" id="planTbl"><thead><tr>
-          <th>Endpoint</th><th>Risk</th><th>Priority</th><th>Recommendation</th>
-        </tr></thead><tbody></tbody></table>
-      </div>
-      <div class="card">
-        <h2>Policy Notes</h2>
-        <ul>
-          <li>Prefer hybrid key exchange for Internet‑facing services.</li>
-          <li>Phase out SHA‑1/MD5; upgrade RSA‑2048 as an interim step when PQC is not yet available.</li>
-          <li>Track CA/platform support for PQC‑capable X.509 issuance before switching signing algorithms.</li>
-          <li>No private key material is ever processed.</li>
-        </ul>
-      </div>
-    </div>`;
-  ['sExpiry','sExternal','sWeak','sRsa'].forEach(id=>{
-    document.getElementById(id).oninput=e=>{
-      const key={sExpiry:'expiry',sExternal:'external',sWeak:'weakAlgo',sRsa:'rsa2048'}[id];
-      state.sliders[key]=+e.target.value;
-    };
   });
-  document.getElementById('backMap').onclick=()=>{ state.current=1; render(); };
-  document.getElementById('goExport').onclick=()=>{ state.current=3; render(); };
-  const tbody=stage.querySelector('#planTbl tbody');
-  for(const c of [...state.inventory].sort((a,b)=>b.risk.score-a.risk.score)){
-    const sev=c.risk.score>=80?'tagBAD':c.risk.score>=60?'tagWARN':'tagOK';
-    const tr=document.createElement('tr'); tr.innerHTML=`<td>${c.endpoint}</td><td class="${sev}">${c.risk.score}</td><td>${c.pqc.priority}</td><td>${c.pqc.recommendation}</td>`; tbody.appendChild(tr);
-  }
+  $('#toMap').disabled = data.length===0;
 }
 
-/* ---------- Export ---------- */
-function renderExport(){
-  setStep(3);
-  stage.innerHTML = `
-    <div class="grid">
-      <div class="card">
-        <h2>Export – CBOM</h2>
-        <div class="row">
-          <button class="btn alt" id="exportJson">Export JSON</button>
-          <button class="btn" id="exportCsv">Export CSV</button>
-          <button class="btn" id="backPlan">← Back to Plan</button>
-        </div>
-        <div class="field" style="margin-top:12px">
-          <label>Compliance Watermark (read‑only)</label>
-          <input type="text" value="${WATERMARK}" readonly>
-        </div>
-        <div class="field"><label>Preview</label><textarea readonly id="preview"></textarea></div>
-      </div>
-      <div class="card">
-        <h2>Data Model</h2>
-        <pre style="white-space:pre-wrap;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px">{
-  endpoint, cn, san[], issuer, serial, algorithm, keyBits, notBefore, notAfter, environment, external,
-  owner: { team, backup, confidence, stale },
-  risk:  { score, notes },
-  pqc:   { tagged, priority, recommendation },
-  provenance: [ sources ]
-}</pre>
-        <h2 style="margin-top:12px">Assurances</h2>
-        <ul>
-          <li>Processes public cert metadata only.</li>
-          <li>Anonymization ${state.anonymize? 'ON' : 'OFF'} by default.</li>
-          <li>Blocks private key material.</li>
-          <li>No persistence in Demo Mode.</li>
-        </ul>
-      </div>
-    </div>`;
-  document.getElementById('backPlan').onclick=()=>{ state.current=2; render(); };
-  document.getElementById('exportJson').onclick=()=>doExport('json');
-  document.getElementById('exportCsv').onclick=()=>doExport('csv');
-  document.getElementById('preview').value = JSON.stringify(state.inventory.slice(0,3), null, 2) + (state.inventory.length>3?'\n...':'');
-}
-function download(filename,content,type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
-function toCsv(rows){
-  const header=['endpoint','cn','san','issuer','serial','algorithm','keyBits','notBefore','notAfter','environment','external','owner.team','owner.backup','owner.confidence','owner.stale','risk.score','pqc.priority','pqc.recommendation','provenance','watermark'];
-  const esc=v=>'"'+String(v).replace(/"/g,'""')+'"'; const lines=[header.join(',')];
-  for(const c of rows){
-    lines.push([c.endpoint,c.cn,(c.san||[]).join('|'),c.issuer,c.serial,c.algorithm,c.keyBits,c.notBefore,c.notAfter,c.environment,c.external,
-      c.owner?.team||'',c.owner?.backup||'',c.owner?.confidence||0,c.owner?.stale||false,c.risk?.score||0,c.pqc?.priority||0,c.pqc?.recommendation||'',(c.provenance||[]).join('|'),WATERMARK].map(esc).join(','));
-  }
-  return lines.join('\n');
-}
-function doExport(kind){
-  const ts=new Date().toISOString().replace(/[:.]/g,'-');
-  if(kind==='json'){ const out={watermark:WATERMARK,generatedAt:new Date().toISOString(),items:state.inventory}; download(`cbom-${ts}.json`,JSON.stringify(out,null,2),'application/json'); }
-  else download(`cbom-${ts}.csv`, toCsv(state.inventory), 'text/csv');
+$('#btnScan').addEventListener('click',()=>{
+  // In demo: instantly populate from connectors (simulated)
+  state.items=[...SAMPLE_ITEMS];
+  renderScan();
+  // Nudge next button
+  $('#toMap').classList.add('ring-4','ring-blue-200'); setTimeout(()=>$('#toMap').classList.remove('ring-4','ring-blue-200'),1200);
+});
+$('#btnClear').addEventListener('click',()=>{ state.items=[]; renderScan(); });
+$('#anonymize').addEventListener('change',e=>{ state.anonymize=e.target.checked; renderScan(); });
+
+// Lab mode: block private key material
+function looksLikePrivateKey(s){ return /-----BEGIN (RSA |EC |)PRIVATE KEY-----/i.test(s||''); }
+$('#btnParsePem').addEventListener('click', async ()=>{
+  const text=$('#pemInput').value.trim(); if(!text) return;
+  if(looksLikePrivateKey(text)){ alert('Private keys are not allowed. Public certificates only.'); return; }
+  const blocks=text.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g)||[];
+  const parsed=await Promise.all(blocks.map(parsePemBlock));
+  const clean=parsed.filter(Boolean);
+  state.items=[...state.items, ...clean]; renderScan(); $('#pemInput').value='';
+});
+$('#btnLoadJson').addEventListener('click',()=> $('#fileJson').click());
+$('#fileJson').addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; try{ const j=JSON.parse(await f.text()); state.items=[...state.items, ...j]; renderScan(); }catch{ alert('Invalid JSON'); }});
+
+// PEM parsing (minimal)
+function pemToDer(pem){ const b64=pem.replace(/-----(BEGIN|END) CERTIFICATE-----/g,'').replace(/\s+/g,''); const bin=atob(b64); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u.buffer; }
+async function parsePemBlock(pem){ try{ const der=pemToDer(pem); const asn1=asn1js.fromBER(der); if(asn1.offset===-1) throw new Error('ASN.1 parse error'); const cert=new pkijs.Certificate({ schema: asn1.result });
+  const subject=cert.subject.typesAndValues.find(tv=>tv.type==='2.5.4.3'); const cn=subject?subject.value.valueBlock.value:'unknown';
+  let san=[]; for(const ext of cert.extensions||[]){ if(ext.extnID==='2.5.29.17'){ san=(ext.parsedValue.altNames||[]).map(a=>a.value||a.ip||''); }}
+  const spki=cert.subjectPublicKeyInfo; const algOID=spki.algorithm.algorithmId; let algorithm='Other', keyBits=0; if(algOID==='1.2.840.113549.1.1.1'){ algorithm='RSA'; keyBits=spki.parsedKey.modulus.valueBlock.valueHex.byteLength*8; } if(algOID==='1.2.840.10045.2.1'){ algorithm='ECDSA'; keyBits=256; }
+  return {endpoint:'pem:import', cn, san, issuer:cert.issuer.typesAndValues.map(tv=>tv.value.valueBlock.value).join(','), serial:String(cert.serialNumber.valueBlock.toString()), algorithm, keyBits, notAfter:cert.notAfter.value.toDate().toISOString(), environment:'unknown', external:false, provenance:['lab']}; } catch(e){ console.error(e); return null; } }
+
+$('#toMap').addEventListener('click',()=>{ setStep(1); runMapping(); });
+
+// --------------------- Map Panel ---------------------
+function runMapping(){
+  // Simple AI-ish mapper: derive owner/env from endpoint/cn tokens
+  state.mapped = state.items.map(x=>{
+    const name=(x.cn||x.endpoint||'').toLowerCase();
+    const env = /prod|payments|orders|edge/.test(name)?'prod': /vault|internal|dev|test/.test(name)?'dev':'prod';
+    const team = name.includes('payments')? 'payments-api' : name.includes('orders')? 'orders' : name.includes('vault')? 'platform-security' : 'edge-services';
+    const backup = team==='platform-security'? 'platform-core' : 'platform-security';
+    const confidence = name.includes('internal')? 0.7 : 0.88; // toy heuristic
+    const stale = false; // demo
+    return { ...x, owner:{team, backup, confidence, stale} };
+  });
+  renderMap();
 }
 
-/* Boot */
-render();
+function renderMap(){
+  const tbody=$('#tbodyMap'); tbody.innerHTML='';
+  const stats={ mapped:0, low:0, total:state.mapped.length };
+  state.mapped.forEach(m=>{
+    const c = Math.round(m.owner.confidence*100);
+    if(c>=75) stats.mapped++; else stats.low++;
+    const tr=document.createElement('tr'); tr.className='hover:bg-gray-50';
+    tr.innerHTML=`<td class="px-3 py-2">${state.anonymize?anonymizeStr(m.endpoint):m.endpoint}</td>
+      <td class="px-3 py-2">${m.owner.team}</td>
+      <td class="px-3 py-2">${m.owner.backup}</td>
+      <td class="px-3 py-2">${m.environment}</td>
+      <td class="px-3 py-2">${c}%</td>
+      <td class="px-3 py-2">${c<75?'<span class=\'chip bg-amber-100 text-amber-800\'>needs attestation</span>':'<span class=\'chip bg-emerald-100 text-emerald-800\'>ok</span>'}</td>`;
+    tbody.appendChild(tr);
+  });
+  const box=(title,val,desc)=>`<div class="p-3 border rounded-xl"><div class="text-xs text-gray-500">${title}</div><div class="text-xl font-extrabold">${val}</div><div class="text-[11px] text-gray-500">${desc}</div></div>`;
+  $('#ownershipStats').innerHTML = box('Items', stats.total,'total discovered') + box('Mapped ≥75% conf.', stats.mapped,'ready for automation') + box('Needs attestation', stats.low,'human review');
+}
+
+$$('[data-back]').forEach(b=> b.addEventListener('click',()=>{ const i=$$('.panel').findIndex(p=>!p.classList.contains('hidden')); setStep(Math.max(0,i-1)); }));
+$('#toPlan').addEventListener('click',()=>{ setStep(2); recomputePlan(); drawCharts(); });
+
+// --------------------- Plan Panel ---------------------
+function scoreItem(x,w){
+  const days = daysUntil(x.notAfter);
+  const soon = days<=30? (days<=7?30:20) : 0;
+  const weak = (x.algorithm==='RSA'&&x.keyBits<2048)||(x.algorithm==='ECDSA'&&x.keyBits<256) ? 20:0;
+  const rsa = (x.algorithm==='RSA'&&x.keyBits===2048)? 5:0;
+  const ext = x.external? 40:0;
+  return Math.round(ext*w.ext + soon*w.exp + weak*w.weak + rsa*w.rsa);
+}
+
+function recomputePlan(){
+  const w={ ext: +$('#wExternal').value/40, exp:+$('#wExpiry').value/30, weak:+$('#wWeak').value/20, rsa:+$('#wRsa').value/5 };
+  const ranked = state.mapped.map(x=>{
+    const s=scoreItem(x,w); const reasons=[];
+    if(x.external) reasons.push('external');
+    const d=daysUntil(x.notAfter); if(d<=30) reasons.push(d<=7?'expires ≤7d':'expires ≤30d');
+    if((x.algorithm==='RSA'&&x.keyBits<2048)||(x.algorithm==='ECDSA'&&x.keyBits<256)) reasons.push('weak key');
+    if(x.algorithm==='RSA'&&x.keyBits===2048) reasons.push('RSA‑2048 uplift');
+    return { ...x, priority:s, reasons:reasons.join(', ')};
+  }).sort((a,b)=>b.priority-a.priority);
+  state.plan=ranked;
+  const tbody=$('#tbodyPlan'); tbody.innerHTML='';
+  ranked.forEach(r=>{
+    const tr=document.createElement('tr'); tr.className='hover:bg-gray-50';
+    const name=state.anonymize?anonymizeStr(r.cn):r.cn;
+    tr.innerHTML=`<td class="px-3 py-2">${name} <span class="text-xs text-gray-500">(${r.endpoint})</span></td>
+      <td class="px-3 py-2">${r.reasons||'-'}</td>
+      <td class="px-3 py-2">${r.priority}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+['#wExternal','#wExpiry','#wWeak','#wRsa'].forEach(id=> $(id).addEventListener('input',recomputePlan));
+$('#toExport').addEventListener('click',()=>{ setStep(3); });
+
+// Charts
+function drawCharts(){
+  const ctx1=$('#expiryChart'); const ctx2=$('#algoChart');
+  const buckets={'≤7d':0,'8–30d':0,'31–90d':0,'>90d':0};
+  state.mapped.forEach(c=>{ const d=daysUntil(c.notAfter); if(d<=7) buckets['≤7d']++; else if(d<=30) buckets['8–30d']++; else if(d<=90) buckets['31–90d']++; else buckets['>90d']++; });
+  new Chart(ctx1,{type:'bar',data:{labels:Object.keys(buckets),datasets:[{label:'Count',data:Object.values(buckets)}]},options:{plugins:{legend:{display:false}},responsive:true}});
+  const alg={'RSA <2048':0,'RSA ≥2048':0,'ECDSA <P‑256':0,'ECDSA ≥P‑256':0,'Other':0};
+  state.mapped.forEach(c=>{ if(c.algorithm==='RSA') (c.keyBits<2048?alg['RSA <2048']++:alg['RSA ≥2048']++); else if(c.algorithm==='ECDSA') (c.keyBits<256?alg['ECDSA <P‑256']++:alg['ECDSA ≥P‑256']++); else alg['Other']++; });
+  new Chart(ctx2,{type:'doughnut',data:{labels:Object.keys(alg),datasets:[{data:Object.values(alg)}]},options:{responsive:true}});
+}
+
+// --------------------- Export Panel ---------------------
+function buildCBOM(){
+  const policy={ anonymized: $('#exportAnon').checked, weights:{ external:+$('#wExternal').value, expiry:+$('#wExpiry').value, weak:+$('#wWeak').value, rsa:+$('#wRsa').value } };
+  const items=state.plan.map(x=>({
+    id: crypto.randomUUID(), endpoint:x.endpoint, cn: policy.anonymized?anonymizeStr(x.cn):x.cn, san:x.san||[], issuer:x.issuer, serial:x.serial,
+    algorithm:x.algorithm, keyBits:x.keyBits, notBefore:x.notBefore||null, notAfter:x.notAfter, environment:x.environment, external:x.external,
+    owner:x.owner, risk:{ score:0, notes:[] }, pqc:{ tagged: true, priority: x.priority, recommended: 'hybrid first' }, provenance:x.provenance
+  }));
+  const summary={ total:items.length, expiring30:items.filter(i=>daysUntil(i.notAfter)<=30).length, weak:items.filter(i=> (i.algorithm==='RSA'&&i.keyBits<2048)||(i.algorithm==='ECDSA'&&i.keyBits<256)).length, pqcTagged:items.filter(i=>i.pqc?.tagged).length };
+  return { generatedAt:new Date().toISOString(), policy, summary, items, watermark:"Generated from public certificate metadata; no private keys processed." };
+}
+
+$('#btnExportJson').addEventListener('click',()=>{ const cbom=buildCBOM(); download(`cbom_${new Date().toISOString().slice(0,19)}.json`, JSON.stringify(cbom,null,2), 'application/json'); });
+$('#btnExportCsv').addEventListener('click',()=>{
+  if(!state.plan.length) return; const headers=['endpoint','cn','issuer','algorithm','keyBits','notAfter','environment','external','owner.team','owner.backup','priority'];
+  const lines=[headers.join(',')];
+  state.plan.forEach(r=>{ const row=[r.endpoint, state.anonymize?anonymizeStr(r.cn):r.cn, r.issuer, r.algorithm, r.keyBits||'', r.notAfter, r.environment, r.external, r.owner?.team||'', r.owner?.backup||'', r.priority]; lines.push(row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')); });
+  download(`inventory_${new Date().toISOString().slice(0,19)}.csv`, lines.join('\n'), 'text/csv');
+});
+$('#btnRestart').addEventListener('click',()=>{ location.reload(); });
+
+// --------------------- Guide Modal ---------------------
+$('#openGuide').addEventListener('click',()=> $('#guide').classList.remove('hidden'));
+$('#closeGuide').addEventListener('click',()=> $('#guide').classList.add('hidden'));
+
+// Boot
+setStep(0); renderScan();
 </script>
 </body>
 </html>
